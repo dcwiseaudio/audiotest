@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WiseReader Audio (Fully Safe)</title>
+  <style>
+    :root{--brand:#4f8ef7;--bg:#f7f7fb;--card:#fff;--bd:#e9eef5;--tx:#222;}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+    header{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--bd);padding:10px 16px}
+    h1{margin:0;font-size:22px;font-weight:900;text-align:center}
+    main{max-width:900px;margin:0 auto;padding:16px}
+    .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;box-shadow:0 6px 18px rgba(0,0,0,.05)}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    input{
+      flex:1 1 280px; padding:14px 12px; font-size:22px; font-weight:800;
+      border:2px solid #d5ddea;border-radius:12px
+    }
+    button{
+      padding:12px 14px;border-radius:12px;border:1px solid #d5ddea;background:#fff;
+      font-size:16px;font-weight:800;cursor:pointer
+    }
+    button:active{transform:translateY(1px)}
+    .small{font-size:13px;color:#666;line-height:1.4}
+    .status{margin-top:10px;font-size:14px;font-weight:700}
+    .ok{color:#1b5e20}
+    .bad{color:#c62828}
+    .now{margin-top:12px;font-size:18px;font-weight:900;text-align:center;color:var(--brand)}
+    .controls{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+    .controls button{min-width:110px}
+    .rate{
+      display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap;
+      margin-top:10px;
+    }
+    select{padding:10px 12px;border-radius:10px;border:1px solid #d5ddea;font-weight:800}
+    audio{width:100%; margin-top:10px}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎧 WiseReader 오디오 재생 (Fully 호환)</h1>
+  </header>
+
+  <main>
+    <div class="card">
+      <div class="row">
+        <input id="qn" placeholder="QN 입력 (예: N2300)" autocapitalize="characters" />
+        <button id="btnLoad">불러오기</button>
+        <button id="btnPlay">재생</button>
+        <button id="btnStop">정지</button>
+      </div>
+
+      <div class="small" style="margin-top:10px">
+        ✅ Fully에서 TTS 오류(speechSynthesis) 없이 작동하도록 <b>mp3 파일</b>을 재생합니다.<br/>
+        파일 규칙: <b>audio/책코드.mp3</b> (예: audio/n2300.mp3)
+      </div>
+
+      <div id="status" class="status"></div>
+      <div id="now" class="now"></div>
+
+      <audio id="player" controls preload="none"></audio>
+
+      <div class="rate">
+        <span style="font-weight:800;">재생속도</span>
+        <select id="rateSel">
+          <option value="0.85">0.85x</option>
+          <option value="0.9">0.9x</option>
+          <option value="1.0" selected>1.0x</option>
+          <option value="1.1">1.1x</option>
+        </select>
+        <span class="small">(*속도는 기기마다 미세차이 있을 수 있어요)</span>
+      </div>
+
+      <div class="controls">
+        <button id="back2">⏪ -2초</button>
+        <button id="fwd2">⏩ +2초</button>
+        <button id="restart">🔁 처음부터</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const $ = (id)=>document.getElementById(id);
+    const qnInput = $('qn');
+    const audio = $('player');
+    const statusEl = $('status');
+    const nowEl = $('now');
+    const rateSel = $('rateSel');
+
+    function normQN(raw){
+      return (raw||'').trim().toLowerCase();
+    }
+
+    function setStatus(msg, ok=true){
+      statusEl.textContent = msg;
+      statusEl.className = 'status ' + (ok ? 'ok' : 'bad');
+    }
+
+    function buildUrl(qn){
+      // ✅ 캐시 문제 방지용 쿼리(매번 최신 파일로)
+      const cacheBust = Date.now();
+      return `audio/${qn}.mp3?v=${cacheBust}`;
+    }
+
+    async function checkHead(url){
+      // Fully/서버에 따라 HEAD가 막힐 수 있어 GET으로 fallback
+      try{
+        const r = await fetch(url, { method:'HEAD', cache:'no-store' });
+        return r.ok;
+      }catch(_){
+        try{
+          const r = await fetch(url, { method:'GET', cache:'no-store' });
+          return r.ok;
+        }catch(__){
+          return false;
+        }
+      }
+    }
+
+    async function loadQN(){
+      const qn = normQN(qnInput.value);
+      if(!qn){ setStatus('QN을 입력하세요.', false); return; }
+
+      const url = buildUrl(qn);
+      setStatus('파일 확인 중...', true);
+
+      const ok = await checkHead(url);
+      if(!ok){
+        setStatus(`mp3를 찾지 못했습니다: audio/${qn}.mp3`, false);
+        nowEl.textContent = '';
+        return;
+      }
+
+      audio.src = url;
+      audio.playbackRate = parseFloat(rateSel.value || '1.0');
+      audio.load();
+
+      nowEl.textContent = `현재 책코드: ${qn.toUpperCase()}`;
+      setStatus(`불러오기 완료 ✅ (audio/${qn}.mp3)`, true);
+    }
+
+    function play(){
+      if(!audio.src){ setStatus('먼저 불러오기를 하세요.', false); return; }
+      audio.playbackRate = parseFloat(rateSel.value || '1.0');
+      audio.play().catch(()=>setStatus('재생이 차단되었습니다. 화면 터치 후 다시 재생해 주세요.', false));
+    }
+
+    function stop(){
+      audio.pause();
+      audio.currentTime = 0;
+      setStatus('정지', true);
+    }
+
+    function jump(sec){
+      if(!audio.duration) return;
+      audio.currentTime = Math.min(Math.max(0, audio.currentTime + sec), audio.duration);
+    }
+
+    $('btnLoad').addEventListener('click', loadQN);
+    $('btnPlay').addEventListener('click', play);
+    $('btnStop').addEventListener('click', stop);
+
+    $('back2').addEventListener('click', ()=>jump(-2));
+    $('fwd2').addEventListener('click', ()=>jump(2));
+    $('restart').addEventListener('click', ()=>{ audio.currentTime = 0; play(); });
+
+    rateSel.addEventListener('change', ()=>{
+      audio.playbackRate = parseFloat(rateSel.value || '1.0');
+      setStatus(`재생속도: ${audio.playbackRate}x`, true);
+    });
+
+    // Enter로 불러오기
+    qnInput.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter') loadQN();
+    });
+  </script>
+</body>
+</html>
